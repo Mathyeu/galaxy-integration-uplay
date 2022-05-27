@@ -1,5 +1,7 @@
 import asyncio
+import datetime
 import json
+import os
 import time
 import logging as log
 import multiprocessing
@@ -456,10 +458,13 @@ class UplayPlugin(Plugin):
                     game.status = GameStatus.Installed
                     self.update_local_game_status(game.as_local_game())
                     asyncio.create_task(self.prevent_uplay_from_showing())
+                    self.check_playtime_recorder(game.install_id)
                 elif statuses[game.install_id] == GameStatus.Running and game.status != GameStatus.Running:
                     log.info(f"updating status for {game.name} to running")
                     game.status = GameStatus.Running
                     self.update_local_game_status(game.as_local_game())
+                    self.persistent_cache['play_time_recorder'][game.install_id] = datetime.datetime.now().strftime(
+                        '%m/%d/%y %H:%M:%S')
                 elif statuses[game.install_id] in [GameStatus.NotInstalled, GameStatus.Unknown] and game.status not in [GameStatus.NotInstalled, GameStatus.Unknown]:
                     log.info(f"updating status for {game.name} to not installed")
                     game.status = GameStatus.NotInstalled
@@ -578,6 +583,20 @@ class UplayPlugin(Plugin):
                 return GameLibrarySettings(game_id, [], False)
             return GameLibrarySettings(game_id, ['favorite'] if game_library_settings['favorite'] else [],
                                        game_library_settings['hidden'])
+
+    def check_playtime_recorder(self, game_id):
+        old_game_stat = self.persistent_cache.get('play_time_recorder', None)
+        if old_game_stat.get(game_id, False):
+            games_file = open(os.path.dirname(os.path.abspath(__file__)) + '/local_stats.json', 'r+')
+            data = json.load(games_file)
+            for a_dict in data:
+                if a_dict.get('gameId', None) == game_id:
+                    a_dict['playtime'] += int((datetime.datetime.now() - datetime.datetime.strptime(
+                        old_game_stat[game_id], '%m/%d/%y %H:%M:%S')).total_seconds() / 60.0)
+                    a_dict['last_played'] = int(time.mktime(datetime.datetime.now().timetuple()))
+            games_file.seek(0)
+            json.dump(data, games_file)
+            self.persistent_cache['old_game_time'].pop(game_id)
 
     def reset_tick_count(self):
         # Resetting tick count ensures that certain operations performed on tick will be made with a known delay.

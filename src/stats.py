@@ -1,3 +1,6 @@
+import json
+import os
+
 import dateutil.parser
 import math
 import logging
@@ -124,6 +127,38 @@ def find_times(statscards: dict, game_id: str = None) -> Tuple[Optional[int], Op
 
     if time_stats:
         playtime = _get_playtime_heuristics(time_stats)
+
+    if playtime and playtime <= 0:
+        playtime = 0
+
+    return playtime, last_played
+
+def find_local_times(game_id: str = None) -> Tuple[Optional[int], Optional[int]]:
+    """
+    result[0] - total_playtime in minutes
+    result[1] - last_played as timestamp
+    """
+
+    playtime = None
+    last_played = None
+
+    games_file = open(os.path.dirname(os.path.abspath(__file__)) + '/local_stats.json', 'r+')
+    data = json.load(games_file)
+    game = list(filter(lambda x: x["gameId"] == str(game_id), data))
+    if game:
+        game = game[0]
+    else:
+        data.append({
+            "gameId": str(game_id),
+            "playtime": 0,
+            "last_played": 0,
+        })
+        games_file.seek(0)
+        json.dump(data, games_file)
+
+
+    playtime = int(game["playtime"])
+    last_played = int(game["last_played"])
 
     if playtime and playtime <= 0:
         playtime = 0
